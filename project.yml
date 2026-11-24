@@ -1,0 +1,34 @@
+# XcodeGen spec — run `xcodegen` to produce ytm-mac.xcodeproj (gitignored).
+name: ytm-mac
+options:
+  deploymentTarget: { macOS: "14.0" }
+packages:
+  SweetCookieKit:
+    url: https://github.com/steipete/SweetCookieKit.git
+    from: 0.6.0
+targets:
+  ytm-mac:
+    type: application
+    platform: macOS
+    sources: [Sources/App]
+    dependencies:
+      - package: SweetCookieKit
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: me.danielsinclair.ytm-mac
+        PRODUCT_NAME: YouTube Music
+        DEVELOPMENT_TEAM: 73SDB2A3A8
+        CODE_SIGN_STYLE: Automatic
+        ENABLE_HARDENED_RUNTIME: YES
+        INFOPLIST_FILE: Support/Info.plist
+        MARKETING_VERSION: 0.1.0
+        CURRENT_PROJECT_VERSION: 0.1.0
+        SWIFT_VERSION: "5.0"
+        ONLY_ACTIVE_ARCH: NO
+        ARCHS: "arm64 x86_64" # Intel Macs top out at macOS 26; still supported
+schemes:
+  ytm-mac:
+    build:
+      targets: { ytm-mac: all }
+    archive:
+      config: Release

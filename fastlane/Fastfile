@@ -1,0 +1,59 @@
+default_platform(:mac)
+
+# Local releases (no CI secrets):
+#   - Signing: cloud-managed Developer ID cert via the Apple ID signed in to Xcode.
+#   - Notarization: `asc` with its keychain-stored App Store Connect key.
+#   - GitHub release: token from `gh auth token`.
+#   - Cask: `brew bump-cask-pr` against the local danielsinclair/tap checkout.
+platform :mac do
+  APP = "YouTube Music.app"
+  # arm64 first: both builds share the same Apple silicon slice (same cdhash), and
+  # Gatekeeper rejected the universal build when the arm64 one was notarized after it.
+  ARCHES = { "arm64" => "arm64", "universal" => "arm64 x86_64" }
+
+  desc "Build, sign and notarize universal + Apple silicon zips into dist/"
+  lane :package do |options|
+    version = options[:version] || UI.user_error!("pass version:X.Y.Z")
+    ARCHES.each do |name, archs|
+      out = "dist/#{name}"
+      build_mac_app(
+        project: "ytm-mac.xcodeproj",
+        scheme: "ytm-mac",
+        configuration: "Release",
+        export_method: "developer-id",
+        export_team_id: "73SDB2A3A8",
+        output_directory: out,
+        xcargs: "MARKETING_VERSION=#{version} CURRENT_PROJECT_VERSION=#{version} ARCHS='#{archs}' -allowProvisioningUpdates",
+        export_xcargs: "-allowProvisioningUpdates",
+      )
+      zip(path: "#{out}/#{APP}", output_path: "#{out}/notarize.zip", symlinks: true)
+      sh("asc", "notarization", "submit", "--file", "../#{out}/notarize.zip", "--wait")
+      sh("xcrun", "stapler", "staple", "../#{out}/#{APP}")
+    end
+    ARCHES.each_key do |name|
+      sh("spctl", "--assess", "-vv", "--ignore-cache", "../dist/#{name}/#{APP}") # fails the lane if rejected
+      zip(path: "dist/#{name}/#{APP}", output_path: "dist/ytm-mac-#{version}-#{name}.zip", symlinks: true)
+    end
+  end
+
+  desc "package, publish the GitHub release, bump the Homebrew cask"
+  lane :release do |options|
+    version = options[:version]
+    package(version: version)
+    prerelease = version.include?("-")
+    set_github_release(
+      repository_name: "DanielSinclair/ytm-mac",
+      api_token: ENV["GITHUB_TOKEN"] || sh("gh", "auth", "token", log: false).strip,
+      tag_name: "v#{version}",
+      name: "v#{version}",
+      commitish: "main",
+      is_generate_release_notes: true,
+      is_prerelease: prerelease,
+      upload_assets: ARCHES.keys.map { |n| "dist/ytm-mac-#{version}-#{n}.zip" },
+    )
+    next if prerelease
+
+    sh("brew", "bump-cask-pr", "--write-only", "--commit", "--version", version, "danielsinclair/tap/ytm-mac")
+    sh("git", "-C", sh("brew", "--repo", "danielsinclair/tap").strip, "push")
+  end
+end
