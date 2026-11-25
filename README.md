@@ -25,6 +25,7 @@ Most desktop wrappers bundle a whole copy of Chromium through Electron. ytm-mac 
 ## Install
 
 ```sh
+brew trust --cask danielsinclair/tap/ytm-mac   # Homebrew 7+ asks you to trust third-party casks
 brew install --cask danielsinclair/tap/ytm-mac
 ```
 
